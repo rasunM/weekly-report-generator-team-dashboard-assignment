@@ -1,0 +1,28 @@
+# Local database only. The backend itself is meant to be run with `npm run dev` on the host
+# (simplest for day-to-day development); this compose file just satisfies "running the database"
+# from the assignment's README requirement with a single command.
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: weekly-reports-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: report_app
+      POSTGRES_PASSWORD: report_app_password
+      POSTGRES_DB: weekly_reports
+    ports:
+      # Host port 5433 (not the default 5432) - avoids colliding with anything else on your machine
+      # already using 5432 (e.g. a natively-installed Postgres from another project). The container's
+      # OWN internal port is still 5432 - only the host-side mapping changed, so `docker exec ...`
+      # commands that connect from inside the container are unaffected.
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U report_app -d weekly_reports"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:

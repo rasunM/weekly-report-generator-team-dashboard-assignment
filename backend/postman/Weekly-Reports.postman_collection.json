@@ -1,0 +1,353 @@
+{
+  "info": {
+    "name": "Weekly Report Generator & Team Dashboard - API",
+    "description": "Full endpoint collection for the Express + Prisma + PostgreSQL backend. Login requests auto-save the accessToken/refreshToken as collection variables via their Tests script, and every other request inherits Authorization: Bearer {{accessToken}} from the collection level - so the usual flow is: run a Login request once, then just fire any other request in any order.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000/api" },
+    { "key": "accessToken", "value": "" },
+    { "key": "refreshToken", "value": "" },
+    { "key": "userId", "value": "" },
+    { "key": "reportId", "value": "" },
+    { "key": "projectId", "value": "" },
+    { "key": "otherUserId", "value": "" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test User\",\n  \"email\": \"testuser@example.com\",\n  \"password\": \"Password123!\",\n  \"role\": \"MEMBER\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "  pm.collectionVariables.set('userId', body.user.id);",
+                  "  console.log('Saved accessToken for', body.user.email);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - Manager (seeded)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"manager@example.com\",\n  \"password\": \"Password123!\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "  pm.collectionVariables.set('userId', body.user.id);",
+                  "  console.log('Logged in as MANAGER:', body.user.email);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - Member (seeded)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"liam@example.com\",\n  \"password\": \"Password123!\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "  pm.collectionVariables.set('userId', body.user.id);",
+                  "  console.log('Logged in as MEMBER:', body.user.email);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Refresh",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/refresh",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('accessToken', body.accessToken);",
+                  "  pm.collectionVariables.set('refreshToken', body.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/auth/logout",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        { "name": "Get My Profile", "request": { "method": "GET", "url": "{{baseUrl}}/users/me" } },
+        {
+          "name": "List Users (manager)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/users?page=1&pageSize=20" }
+        },
+        {
+          "name": "Get User Profile + Stats (manager)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/users/{{otherUserId}}/profile" }
+        },
+        {
+          "name": "Invite User (manager)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/users",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Team Member\",\n  \"email\": \"new.member@example.com\",\n  \"role\": \"MEMBER\",\n  \"temporaryPassword\": \"Password123!\"\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('otherUserId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update User Role (manager)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/users/{{otherUserId}}/role",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"role\": \"MANAGER\"\n}" }
+          }
+        },
+        {
+          "name": "Remove User (manager)",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/users/{{otherUserId}}" }
+        }
+      ]
+    },
+    {
+      "name": "Projects",
+      "item": [
+        { "name": "List Projects", "request": { "method": "GET", "url": "{{baseUrl}}/projects" } },
+        { "name": "Get Project", "request": { "method": "GET", "url": "{{baseUrl}}/projects/{{projectId}}" } },
+        {
+          "name": "Create Project (manager)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/projects",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Project\",\n  \"description\": \"Created from Postman\",\n  \"isActive\": true\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('projectId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update Project (manager)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/projects/{{projectId}}",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Updated from Postman\"\n}" }
+          }
+        },
+        {
+          "name": "Assign Members (manager)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/projects/{{projectId}}/members",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"userIds\": [\"{{otherUserId}}\"]\n}" }
+          }
+        },
+        {
+          "name": "Unassign Member (manager)",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/projects/{{projectId}}/members/{{otherUserId}}" }
+        },
+        {
+          "name": "Delete Project (manager)",
+          "request": { "method": "DELETE", "url": "{{baseUrl}}/projects/{{projectId}}" }
+        }
+      ]
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "List Reports (own history / team list)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/reports?page=1&pageSize=20" }
+        },
+        {
+          "name": "Create Report (member)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/reports",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"weekStart\": \"2026-09-07\",\n  \"weekEnd\": \"2026-09-13\",\n  \"content\": {\n    \"tasksCompleted\": [\n      {\n        \"taskName\": \"Set up Postman collection\",\n        \"priority\": \"Medium\",\n        \"plannedPct\": 100,\n        \"actualPct\": 100,\n        \"status\": \"Completed\",\n        \"timePlannedHrs\": 2,\n        \"timeSpentHrs\": 2,\n        \"deliverable\": \"Postman collection\"\n      }\n    ],\n    \"tasksPlannedNextWeek\": [\"Write more test cases\"],\n    \"blockers\": [\n      { \"text\": \"None\", \"isKey\": false }\n    ],\n    \"achievements\": [\n      { \"text\": \"API fully testable via Postman\", \"isKey\": true }\n    ],\n    \"hoursByType\": [\n      { \"type\": \"DEVELOPMENT\", \"hours\": 2 }\n    ],\n    \"notes\": \"Created via Postman\"\n  }\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.collectionVariables.set('reportId', pm.response.json().id);",
+                  "  console.log('Saved reportId', pm.response.json().id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        { "name": "Get Report By Id", "request": { "method": "GET", "url": "{{baseUrl}}/reports/{{reportId}}" } },
+        {
+          "name": "Get Report Version 1",
+          "request": { "method": "GET", "url": "{{baseUrl}}/reports/{{reportId}}/versions/1" }
+        },
+        {
+          "name": "Update Report (member, while DRAFT or NEEDS_CORRECTION)",
+          "request": {
+            "method": "PATCH",
+            "url": "{{baseUrl}}/reports/{{reportId}}",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": {\n    \"tasksCompleted\": [\n      {\n        \"taskName\": \"Set up Postman collection\",\n        \"priority\": \"Medium\",\n        \"plannedPct\": 100,\n        \"actualPct\": 100,\n        \"status\": \"Completed\"\n      }\n    ],\n    \"tasksPlannedNextWeek\": [\"Updated next-week plan\"],\n    \"blockers\": [],\n    \"achievements\": [],\n    \"hoursByType\": []\n  }\n}"
+            }
+          }
+        },
+        {
+          "name": "Submit Report (member)",
+          "request": { "method": "POST", "url": "{{baseUrl}}/reports/{{reportId}}/submit" }
+        }
+      ]
+    },
+    {
+      "name": "Review",
+      "item": [
+        {
+          "name": "Approve (manager)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/review/{{reportId}}/approve",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"comment\": \"Looks good, approved.\"\n}" }
+          }
+        },
+        {
+          "name": "Request Changes (manager)",
+          "request": {
+            "method": "POST",
+            "url": "{{baseUrl}}/review/{{reportId}}/request-changes",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"comment\": \"Please add more detail to your blockers section.\"\n}" }
+          }
+        },
+        {
+          "name": "Review History",
+          "request": { "method": "GET", "url": "{{baseUrl}}/review/{{reportId}}/history" }
+        }
+      ]
+    },
+    {
+      "name": "Dashboard (manager only)",
+      "item": [
+        { "name": "Summary", "request": { "method": "GET", "url": "{{baseUrl}}/dashboard/summary" } },
+        { "name": "Tasks Completed Trend", "request": { "method": "GET", "url": "{{baseUrl}}/dashboard/tasks-trend?weeks=8" } },
+        { "name": "Status By Member", "request": { "method": "GET", "url": "{{baseUrl}}/dashboard/status-by-member" } },
+        { "name": "Workload By Project", "request": { "method": "GET", "url": "{{baseUrl}}/dashboard/workload-by-project" } },
+        { "name": "Hours By Type", "request": { "method": "GET", "url": "{{baseUrl}}/dashboard/hours-by-type" } },
+        { "name": "Activity Feed", "request": { "method": "GET", "url": "{{baseUrl}}/dashboard/activity-feed?limit=20" } }
+      ]
+    },
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": { "method": "GET", "url": "http://localhost:4000/health" }
+        }
+      ]
+    }
+  ]
+}

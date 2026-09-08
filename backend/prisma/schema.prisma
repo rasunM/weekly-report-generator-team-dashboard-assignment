@@ -1,0 +1,219 @@
+// Weekly Report Generator & Team Dashboard — database schema
+//
+// Design notes (see README.md "Database design" section for the full explanation):
+// - Report / ReportVersion are split on purpose: a Report is the "slot" for one user + one week,
+//   ReportVersion is an immutable snapshot of its content. Every edit-and-resubmit cycle creates a
+//   NEW ReportVersion row instead of overwriting the old one - this is what gives us free version
+//   history (assignment section 3, "Report version history" bonus) instead of needing a separate
+//   audit-log table.
+// - Report.currentVersionId always points at the version currently being worked on / under review.
+//   Older versions stay linked via ReportVersion.reportId and are still readable by version number.
+// - ReviewComment links to BOTH reportId and reportVersionId, so it's always clear which version a
+//   given manager comment was made against (assignment section 3 requirement).
+// - Blockers/achievements are stored as JSON arrays of {text, isKey} objects rather than a normalized
+//   child table - they're small, always read/written as a whole, and never queried/filtered on
+//   individually, so a child table would add join overhead for no real benefit here.
+
+generator client {
+  provider      = "prisma-client-js"
+  // "native" covers local dev (Windows/Mac/whatever you're on); "debian-openssl-3.0.x" is the
+  // engine Render's Linux build/runtime containers need. Without this, a client generated on a
+  // Windows dev machine can't be reused on Render - but since the Render build re-runs
+  // `prisma generate` itself, this line is mainly a safety net against base-image differences.
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  MEMBER
+  MANAGER
+}
+
+enum ReportStatus {
+  DRAFT
+  SUBMITTED
+  NEEDS_CORRECTION
+  APPROVED
+}
+
+enum ReviewAction {
+  APPROVED
+  REQUEST_CHANGES
+}
+
+enum HourType {
+  DEVELOPMENT
+  TESTING
+  MEETINGS
+  DOCUMENTATION
+  OTHER
+}
+
+model User {
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role     @default(MEMBER)
+  createdAt    DateTime @default(now())
+
+  reports             Report[]            @relation("ReportOwner")
+  reviewComments      ReviewComment[]      @relation("Reviewer")
+  projectAssignments  ProjectAssignment[]
+  refreshTokens       RefreshToken[]
+
+  @@map("users")
+}
+
+// Refresh tokens are stored (hashed, never the raw token) so logout can actually revoke a session
+// instead of the client just discarding the token client-side - a purely stateless JWT setup can
+// never be revoked before it expires, which is a weaker answer to the assignment's "secure session
+// handling" requirement than this small amount of extra state.
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  reports     Report[]
+  assignments ProjectAssignment[]
+
+  @@map("projects")
+}
+
+// Optional many-to-many: which team members are assigned to which project.
+model ProjectAssignment {
+  id        String @id @default(uuid())
+  userId    String
+  projectId String
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, projectId])
+  @@map("project_assignments")
+}
+
+// One Report = one (user, week, project) slot. Its actual content lives in ReportVersion.
+model Report {
+  id               String       @id @default(uuid())
+  userId           String
+  projectId        String?
+  weekStart        DateTime     @db.Date
+  weekEnd          DateTime     @db.Date
+  status           ReportStatus @default(DRAFT)
+  currentVersionId String?      @unique
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  user           User            @relation("ReportOwner", fields: [userId], references: [id], onDelete: Cascade)
+  project        Project?        @relation(fields: [projectId], references: [id])
+  // All versions ever created for this report (oldest -> newest by versionNumber).
+  versions       ReportVersion[] @relation("ReportVersions")
+  // The version currently being edited / under review / approved.
+  currentVersion ReportVersion?  @relation("CurrentVersion", fields: [currentVersionId], references: [id])
+  reviewComments ReviewComment[]
+
+  // One report per user per week per project - re-submitting edits the same Report, it never creates
+  // a second row for the same week.
+  @@unique([userId, weekStart, projectId])
+  @@index([userId])
+  @@index([status])
+  @@index([weekStart])
+  @@map("reports")
+}
+
+// Immutable snapshot of a report's content at one point in the review cycle.
+model ReportVersion {
+  id            String    @id @default(uuid())
+  reportId      String
+  versionNumber Int
+  // Array<{ text: string, isKey: boolean }> - "flag one as the key issue/achievement for the week"
+  blockers      Json      @default("[]")
+  achievements  Json      @default("[]")
+  // Array<string> - simple free-text list, no "key" flag required by the spec.
+  tasksPlannedNextWeek Json @default("[]")
+  notes         String?
+  submittedAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  report          Report          @relation("ReportVersions", fields: [reportId], references: [id], onDelete: Cascade)
+  // Inverse side of Report.currentVersionId (a version knows if it's *a* report's current one).
+  currentOfReport Report?         @relation("CurrentVersion")
+  taskEntries     TaskEntry[]
+  hoursEntries    HoursEntry[]
+  reviewComments  ReviewComment[]
+
+  @@unique([reportId, versionNumber])
+  @@map("report_versions")
+}
+
+// One row per task in the "Tasks completed" table for a given report version.
+model TaskEntry {
+  id              String  @id @default(uuid())
+  reportVersionId String
+  taskName        String
+  priority        String
+  plannedPct      Int
+  actualPct       Int
+  status          String
+  timePlannedHrs  Float?
+  timeSpentHrs    Float?
+  deliverable     String?
+  sortOrder       Int     @default(0)
+
+  reportVersion ReportVersion @relation(fields: [reportVersionId], references: [id], onDelete: Cascade)
+
+  @@index([reportVersionId])
+  @@map("task_entries")
+}
+
+// "Hours worked, broken down by task type" - optional per the spec, so a report version may have zero rows.
+model HoursEntry {
+  id              String   @id @default(uuid())
+  reportVersionId String
+  type            HourType
+  hours           Float
+
+  reportVersion ReportVersion @relation(fields: [reportVersionId], references: [id], onDelete: Cascade)
+
+  @@unique([reportVersionId, type])
+  @@map("hours_entries")
+}
+
+// A manager's Approve / Request Changes action, always tied to the exact version it was made against.
+model ReviewComment {
+  id              String       @id @default(uuid())
+  reportId        String
+  reportVersionId String
+  reviewerId      String
+  action          ReviewAction
+  comment         String
+  createdAt       DateTime     @default(now())
+
+  report        Report        @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  reportVersion ReportVersion @relation(fields: [reportVersionId], references: [id], onDelete: Cascade)
+  reviewer      User          @relation("Reviewer", fields: [reviewerId], references: [id])
+
+  @@index([reportId])
+  @@map("review_comments")
+}
