@@ -1,6 +1,6 @@
 # Deployment Guide — Backend on Render, Frontend on Vercel
 
-This guide walks through putting your **backend** (`backend/`) on Render with a managed Postgres database, and your **frontend** (`frontend/`) on Vercel. Both platforms deploy straight from your GitHub repo (`weekly-report-generator-team-dashboard`), so once this is set up, a `git push` to `main` redeploys both automatically.
+This guide walks through putting your **backend** (`backend/`) on Render with a managed Postgres database, and your **frontend** (`frontend/`) on Vercel. Both platforms deploy straight from your GitHub repo (`weekly-report-generator-team-dashboard-assignment`), so once this is set up, a `git push` to `main` redeploys both automatically.
 
 Do the backend first — the frontend needs the backend's URL to talk to it.
 
@@ -18,13 +18,15 @@ Do the backend first — the frontend needs the backend's URL to talk to it.
 ### 2. Create the web service
 
 1. Click **New +** → **Web Service**.
-2. Connect your GitHub account if you haven't, and select the `weekly-report-generator-team-dashboard` repo.
+2. Connect your GitHub account if you haven't, and select the `weekly-report-generator-team-dashboard-assignment` repo.
 3. Fill in the settings:
    - **Root Directory:** `backend`
    - **Runtime:** Node
-   - **Build Command:** `npm install && npm run prisma:generate && npm run build`
+   - **Build Command:** `npm install --include=dev && npm run prisma:generate && npm run build`
    - **Start Command:** `npm run prisma:migrate:deploy && npm start`
    - **Instance Type:** Free is fine to start (it spins down after inactivity and takes ~30–60s to wake back up — a paid instance avoids that if it matters for your use case)
+
+   > **Why `--include=dev`:** Render sets `NODE_ENV=production` during the build, which makes a plain `npm install` skip everything in `devDependencies` — including `typescript` and the `@types/*` packages the build step needs. `--include=dev` forces them to install anyway. This only affects the build; the running app doesn't need devDependencies at all, since `npm start` just runs the already-compiled `dist/` output.
 
    > The start command runs `prisma migrate deploy` (applies your database migrations) every time the service starts, then starts the server. That's what turns your empty Postgres database into one with all your tables. It's safe to run repeatedly — it only applies migrations that haven't run yet.
 
@@ -59,7 +61,7 @@ Your backend's actual API base is that URL plus `/api`, e.g. `https://weekly-rep
 ## Part 2: Frontend on Vercel
 
 1. Go to [vercel.com](https://vercel.com) and sign in with GitHub.
-2. Click **Add New...** → **Project**, and import the same `weekly-report-generator-team-dashboard` repo.
+2. Click **Add New...** → **Project**, and import the same `weekly-report-generator-team-dashboard-assignment` repo.
 3. In the import settings:
    - **Root Directory:** click **Edit** and set it to `frontend`
    - Vercel will auto-detect Next.js — leave the build/output settings as default.
